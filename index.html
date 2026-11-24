@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#7a1f2b">
+<title>태원고 커뮤니티</title>
+<style>
+:root{--bg:#f1f2f4;--card:#fff;--ink:#17181a;--mute:#6b7078;--line:#dfe1e5;--accent:#7a1f2b;--on:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#121316;--card:#1b1d21;--ink:#eceef1;--mute:#9aa0a8;--line:#2c2f35;--accent:#e08995;--on:#2a0c11}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 -apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif}
+.wrap{max-width:620px;margin:0 auto;padding:16px 16px 48px}
+.hidden{display:none!important}
+h1{font-size:21px;margin:0;letter-spacing:-.02em}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px}
+#who{font-size:13px;color:var(--mute)}
+input,textarea{width:100%;font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:11px 12px;margin-bottom:8px}
+textarea{min-height:96px;resize:vertical}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;cursor:pointer}
+.btn{background:var(--accent);color:var(--on);border:0;border-radius:8px;padding:11px 16px;font-weight:600}
+.btn.alt{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.link{background:none;border:0;color:var(--mute);padding:2px 6px;font-size:13px}
+.row{display:flex;gap:8px}.row .btn{flex:1}
+.tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tab{flex:1;background:none;border:0;border-bottom:3px solid transparent;padding:10px 0;color:var(--mute);font-weight:600}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.note{font-size:13px;color:var(--mute);margin:0 0 12px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:16px}
+.post{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:10px}
+.post h3{margin:0 0 4px;font-size:17px}
+.body{margin:0 0 10px;white-space:pre-wrap;word-break:break-word}
+.meta{display:flex;align-items:center;font-size:13px;color:var(--mute)}
+.meta span{flex:1}
+#msg{color:#c0392b;font-size:14px;min-height:20px;margin:6px 0 0}
+.empty{text-align:center;color:var(--mute);padding:32px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<section id="auth" class="hidden">
+  <h1 style="margin:32px 0 4px">태원고 커뮤니티</h1>
+  <p class="note">초대 코드를 받은 학생만 가입할 수 있어요.</p>
+  <input id="email" type="email" placeholder="이메일" autocomplete="email">
+  <input id="pw" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">
+  <div id="signupOnly" class="hidden">
+    <input id="nick" placeholder="닉네임 (자유·공부 게시판에 표시돼요)" maxlength="12">
+    <input id="code" placeholder="초대 코드">
+  </div>
+  <div class="row">
+    <button id="login" class="btn">로그인</button>
+    <button id="toggle" class="btn alt">가입하기</button>
+  </div>
+  <p id="msg"></p>
+</section>
+
+<section id="main" class="hidden">
+  <header><h1>태원고 커뮤니티</h1><div><span id="who"></span><button id="out" class="link">로그아웃</button></div></header>
+  <nav class="tabs">
+    <button class="tab on" data-b="free">자유</button>
+    <button class="tab" data-b="secret">비밀</button>
+    <button class="tab" data-b="study">공부</button>
+  </nav>
+  <p id="secretNote" class="note hidden">비밀게시판은 다른 학생에게 익명이에요. 다만 문제가 생기면 관리자는 작성자를 확인할 수 있어요.</p>
+  <div class="box">
+    <input id="title" placeholder="제목" maxlength="80">
+    <textarea id="content" placeholder="내용" maxlength="2000"></textarea>
+    <button id="send" class="btn">글 올리기</button>
+  </div>
+  <div id="list"></div>
+</section>
+
+</div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app = initializeApp({
+  apiKey: "AIzaSyDU0dSOZWbWoyBffGiJRSAIUUlYkVtUhHM",
+  authDomain: "taewon-c322c.firebaseapp.com",
+  projectId: "taewon-c322c",
+  storageBucket: "taewon-c322c.firebasestorage.app",
+  messagingSenderId: "527139706733",
+  appId: "1:527139706733:web:d9c6bd747586d9246a6c64"
+});
+const auth = getAuth(app), db = getFirestore(app);
+const $ = id => document.getElementById(id);
+const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c; if (x !== undefined) n.textContent = x; return n; };
+const BOARDS = { free: "자유", secret: "비밀", study: "공부" };
+let me = null, nick = "", admin = false, mine = new Set(), board = "free", signingUp = false, signupMode = false;
+
+const show = v => { $("auth").classList.toggle("hidden", v !== "auth"); $("main").classList.toggle("hidden", v !== "main"); };
+const msg = t => { $("msg").textContent = t || ""; };
+const err = e => ({
+  "auth/invalid-credential": "이메일 또는 비밀번호가 맞지 않아요.",
+  "auth/email-already-in-use": "이미 가입된 이메일이에요.",
+  "auth/weak-password": "비밀번호는 6자 이상으로 입력해 주세요.",
+  "auth/invalid-email": "이메일 형식이 올바르지 않아요.",
+  "bad-code": "초대 코드가 올바르지 않아요."
+}[e.code] || "문제가 생겼어요: " + (e.code || e.message));
+
+onAuthStateChanged(auth, async user => {
+  if (signingUp) return;
+  if (!user) { show("auth"); return; }
+  await enter(user);
+});
+
+async function enter(user) {
+  me = user;
+  try {
+    const [m, a] = await Promise.all([getDoc(doc(db, "members", user.uid)), getDoc(doc(db, "admins", user.uid))]);
+    admin = a.exists();
+    if (!m.exists() && !admin) {
+      await signOut(auth);
+      msg("가입이 완료되지 않은 계정이에요. 초대 코드로 다시 가입해 주세요.");
+      return;
+    }
+    nick = m.exists() ? m.data().nickname : "관리자";
+    $("who").textContent = nick + (admin ? " (관리자)" : "");
+    show("main");
+    await load();
+  } catch (e) { show("auth"); msg(err(e)); }
+}
+
+$("toggle").onclick = () => {
+  signupMode = !signupMode; msg();
+  $("signupOnly").classList.toggle("hidden", !signupMode);
+  $("login").textContent = signupMode ? "가입 완료" : "로그인";
+  $("toggle").textContent = signupMode ? "로그인으로" : "가입하기";
+};
+
+$("login").onclick = async () => {
+  const email = $("email").value.trim(), pw = $("pw").value;
+  msg();
+  if (!signupMode) {
+    try { await signInWithEmailAndPassword(auth, email, pw); } catch (e) { msg(err(e)); }
+    return;
+  }
+  const nk = $("nick").value.trim(), code = $("code").value.trim();
+  if (!nk || !code) { msg("닉네임과 초대 코드를 입력해 주세요."); return; }
+  signingUp = true;
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pw);
+    try { await setDoc(doc(db, "members", cred.user.uid), { nickname: nk, code }); }
+    catch (e) { await deleteUser(cred.user); throw { code: "bad-code" }; }
+    signingUp = false;
+    await enter(cred.user);
+  } catch (e) { signingUp = false; msg(err(e)); }
+};
+
+$("out").onclick = () => signOut(auth);
+
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+  board = b.dataset.b;
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === b));
+  $("secretNote").classList.toggle("hidden", board !== "secret");
+  load();
+});
+
+async function load() {
+  const list = $("list");
+  list.textContent = "불러오는 중…";
+  try {
+    const [ps, as] = await Promise.all([
+      getDocs(query(collection(db, "posts"), where("board", "==", board))),
+      getDocs(query(collection(db, "postAuthors"), where("authorUid", "==", me.uid)))
+    ]);
+    mine = new Set(as.docs.map(d => d.id));
+    const rows = ps.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt?.seconds || 9e9) - (a.createdAt?.seconds || 9e9));
+    list.textContent = "";
+    if (!rows.length) { list.append(el("p", "empty", BOARDS[board] + "게시판의 첫 글을 올려 보세요.")); return; }
+    rows.forEach(p => {
+      const c = el("article", "post");
+      c.append(el("h3", "", p.title), el("p", "body", p.content));
+      const f = el("div", "meta");
+      const t = p.createdAt ? new Date(p.createdAt.seconds * 1000).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+      f.append(el("span", "", p.authorName + "  " + t));
+      if (admin || mine.has(p.id)) {
+        const e = el("button", "link", "수정"), d = el("button", "link", "삭제");
+        e.onclick = () => edit(p); d.onclick = () => del(p.id);
+        f.append(e, d);
+      }
+      c.append(f); list.append(c);
+    });
+  } catch (e) { list.textContent = "글을 불러오지 못했어요: " + (e.code || e.message); }
+}
+
+$("send").onclick = async () => {
+  const t = $("title").value.trim(), c = $("content").value.trim();
+  if (!t || !c) { alert("제목과 내용을 모두 입력해 주세요."); return; }
+  const ref = doc(collection(db, "posts")), b = writeBatch(db);
+  b.set(ref, { title: t, content: c, board, authorName: board === "secret" ? "익명" : nick, createdAt: serverTimestamp() });
+  b.set(doc(db, "postAuthors", ref.id), { authorUid: me.uid });
+  try { await b.commit(); $("title").value = ""; $("content").value = ""; load(); }
+  catch (e) { alert("글을 올리지 못했어요: " + (e.code || e.message)); }
+};
+
+async function edit(p) {
+  const t = prompt("제목", p.title); if (t === null) return;
+  const c = prompt("내용", p.content); if (c === null) return;
+  if (!t.trim() || !c.trim()) return;
+  try { await updateDoc(doc(db, "posts", p.id), { title: t.trim(), content: c.trim() }); load(); }
+  catch (e) { alert("수정하지 못했어요: " + (e.code || e.message)); }
+}
+
+async function del(id) {
+  if (!confirm("이 글을 삭제할까요?")) return;
+  const b = writeBatch(db);
+  b.delete(doc(db, "posts", id)); b.delete(doc(db, "postAuthors", id));
+  try { await b.commit(); load(); }
+  catch (e) { alert("삭제하지 못했어요: " + (e.code || e.message)); }
+}
+</script>
+</body>
+</html>
